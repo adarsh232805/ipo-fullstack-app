@@ -1,0 +1,11 @@
+{
+  "name": "ipo-pulse-platform",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm run build",
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "build:admin": "cd admin-panel && npm install && npm run build",
+    "start": "node backend/server.js"
+  }
+}

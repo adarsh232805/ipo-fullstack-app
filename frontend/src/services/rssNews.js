@@ -31,7 +31,8 @@ const fallbackNews = [
 
 export const fetchMergedIpoNews = async (ipoNames = []) => {
   try {
-    const res = await fetch("http://localhost:5000/api/news");
+    const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+    const res = await fetch(`${apiBase}/api/news`);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {

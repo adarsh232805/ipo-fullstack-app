@@ -45,7 +45,8 @@ export default function CompareIpos() {
     setAiSummary("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/ai/groq", {
+      const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+      const res = await fetch(`${apiBase}/api/ai/groq`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -72,7 +73,8 @@ export default function CompareIpos() {
     setChatReply("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/ai/groq", {
+      const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+      const res = await fetch(`${apiBase}/api/ai/groq`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -143,8 +143,9 @@ export default function AdminEditIpo() {
       <Section title="Daily GMP Update">
         <button
           onClick={async () => {
+            const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
             await fetch(
-              `http://localhost:5000/api/admin/ipos/${id}/gmp`,
+              `${apiBase}/api/admin/ipos/${id}/gmp`,
               {
                 method: "POST",
                 headers: {
