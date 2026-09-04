@@ -1,0 +1,16 @@
+import React from "react";
+import { Outlet } from "react-router-dom";
+import Sidebar from "../components/Sidebar";
+import MobileBottomNav from "../components/MobileBottomNav";
+
+export default function DashboardLayout() {
+  return (
+    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+      <Sidebar />
+
+      <main className="flex-1 p-4 md:p-8 overflow-x-hidden">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
