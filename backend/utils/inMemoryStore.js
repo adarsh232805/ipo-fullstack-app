@@ -96,5 +96,9 @@ export const inMemoryStore = {
   getWatchlist(userId) {
     const user = this.getUserById(userId);
     return user ? user.watchlist : [];
+  },
+
+  getAllUsers() {
+    return Array.from(users.values());
   }
 };

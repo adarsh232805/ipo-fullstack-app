@@ -227,32 +227,51 @@ export const updateAllotmentStatus = async (req, res) => {
 export const updateGmp = async (req, res) => {
   try {
     const { gmp } = req.body;
+    const numericGmp = Number(gmp);
 
-    const ipo = await Ipo.findById(req.params.id);
-    if (!ipo) {
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const ipo = await Ipo.findById(req.params.id);
+        if (ipo) {
+          ipo.gmp = numericGmp;
+          if (!Array.isArray(ipo.gmpHistory)) {
+            ipo.gmpHistory = [];
+          }
+
+          const today = new Date().toDateString();
+          const last = ipo.gmpHistory.at(-1);
+
+          if (!last || new Date(last.date).toDateString() !== today) {
+            ipo.gmpHistory.push({
+              date: new Date(),
+              gmp: numericGmp
+            });
+          }
+
+          await ipo.save();
+          return res.json(ipo);
+        }
+      } catch (dbErr) {
+        console.warn("DB updateGmp error, falling back to memory:", dbErr.message);
+      }
+    }
+
+    // In-memory fallback
+    const item = iposData.find(i => i._id === req.params.id);
+    if (!item) {
       return res.status(404).json({ message: "IPO not found" });
     }
 
-    const numericGmp = Number(gmp);
-    ipo.gmp = numericGmp;
-
-    if (!Array.isArray(ipo.gmpHistory)) {
-      ipo.gmpHistory = [];
+    item.gmp = numericGmp;
+    if (!Array.isArray(item.gmpHistory)) {
+      item.gmpHistory = [];
     }
+    item.gmpHistory.push({
+      date: new Date().toISOString().split("T")[0],
+      gmp: numericGmp
+    });
 
-    /* ✅ AVOID DUPLICATE SAME-DAY ENTRY */
-    const today = new Date().toDateString();
-    const last = ipo.gmpHistory.at(-1);
-
-    if (!last || new Date(last.date).toDateString() !== today) {
-      ipo.gmpHistory.push({
-        date: new Date(),
-        gmp: numericGmp
-      });
-    }
-
-    await ipo.save();
-    res.json(ipo);
+    res.json(item);
   } catch (err) {
     console.error("GMP update error:", err);
     res.status(500).json({ message: "Failed to update GMP" });

@@ -101,3 +101,20 @@ export const getAdminAnalytics = () =>
 export const triggerMarketSync = () =>
   axios.post("/market-sync/trigger");
 
+/* ================================
+   USER MANAGEMENT (ADMIN)
+================================ */
+
+export const getAdminUsers = () =>
+  axios.get("/admin/users");
+
+export const updateUserKyc = (userId, status) =>
+  axios.patch(`/admin/users/${userId}/kyc`, { status });
+
+export const toggleUserBlock = (userId) =>
+  axios.patch(`/admin/users/${userId}/block`);
+
+export const getMarketTrends = () =>
+  axios.get("/market-trends");
+
+

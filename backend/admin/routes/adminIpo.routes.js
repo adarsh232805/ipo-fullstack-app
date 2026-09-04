@@ -25,6 +25,7 @@ router.delete("/:id", deleteIpo);
 
 /* ================= GMP ================= */
 router.put("/:id/gmp", updateGmp);
+router.post("/:id/gmp", updateGmp);
 
 /* ================= 🔥 ALLOTMENT (FIXED) ================= */
 router.put("/:id/allotment", updateAllotmentStatus);

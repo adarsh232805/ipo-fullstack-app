@@ -1,7 +1,9 @@
+import mongoose from "mongoose";
 import User from "../../models/User.js";
 import Notification from "../../models/Notification.js";
 import UserActivity from "../../models/UserActivity.js";
 import { sendEmail } from "../../utils/sendEmail.js";
+import { inMemoryStore } from "../../utils/inMemoryStore.js";
 
 /* ================= GET ALL USERS (SEARCH + FILTER + PAGINATION) ================= */
 export const getAllUsers = async (req, res) => {
@@ -14,40 +16,67 @@ export const getAllUsers = async (req, res) => {
       limit = 10
     } = req.query;
 
-    const query = {};
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const query = {};
 
-    /* 🔍 SEARCH */
+        if (search) {
+          query.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } }
+          ];
+        }
+
+        if (kyc) {
+          query.kycStatus = kyc;
+        }
+
+        if (blocked === "true") query.isBlocked = true;
+        if (blocked === "false") query.isBlocked = false;
+
+        const skip = (page - 1) * limit;
+
+        const [users, total] = await Promise.all([
+          User.find(query)
+            .select("-password")
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(Number(limit)),
+          User.countDocuments(query)
+        ]);
+
+        if (users && users.length > 0) {
+          return res.json({
+            users,
+            page: Number(page),
+            totalPages: Math.ceil(total / limit),
+            total
+          });
+        }
+      } catch (dbErr) {
+        console.warn("DB getAllUsers error, falling back to memory:", dbErr.message);
+      }
+    }
+
+    // In-memory fallback
+    let list = inMemoryStore.getAllUsers().map(u => {
+      const { password, ...safe } = u;
+      return safe;
+    });
+
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } }
-      ];
+      const q = search.toLowerCase();
+      list = list.filter(u => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q));
     }
 
-    /* 🔐 KYC FILTER */
-    if (kyc) {
-      query.kycStatus = kyc;
-    }
-
-    /* 🚫 BLOCK FILTER */
-    if (blocked === "true") query.isBlocked = true;
-    if (blocked === "false") query.isBlocked = false;
-
+    const total = list.length;
     const skip = (page - 1) * limit;
-
-    const [users, total] = await Promise.all([
-      User.find(query)
-        .select("-password")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit)),
-      User.countDocuments(query)
-    ]);
+    const users = list.slice(skip, skip + Number(limit));
 
     res.json({
       users,
       page: Number(page),
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / limit) || 1,
       total
     });
   } catch (err) {
