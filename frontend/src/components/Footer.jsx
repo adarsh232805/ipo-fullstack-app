@@ -309,11 +309,27 @@ export default function Footer() {
           </p>
         </div>
 
-        {/* BOTTOM COPYRIGHT & SEBI NOTE */}
+        {/* BOTTOM COPYRIGHT & CREATOR ATTRIBUTION */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-          <p className="text-slate-500 text-center sm:text-left">
-            © {new Date().getFullYear()} IPOPulse Pro. All rights reserved. Data compiled from official exchange feeds and verified merchant bankers.
-          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 text-center sm:text-left">
+            <p className="text-slate-500">
+              © {new Date().getFullYear()} IPOPulse Pro. All rights reserved.
+            </p>
+            <span className="hidden sm:inline text-slate-700">•</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 font-medium">
+              <span>Made with</span>
+              <span className="text-rose-500 animate-pulse">❤️</span>
+              <span>by</span>
+              <a
+                href="https://github.com/adarsh232805"
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold text-emerald-400 hover:text-emerald-300 hover:underline transition"
+              >
+                Adarsh Singh
+              </a>
+            </div>
+          </div>
 
           <div className="flex items-center gap-4 text-slate-500">
             <span className="flex items-center gap-1">
@@ -321,7 +337,7 @@ export default function Footer() {
               <span>SSL 256-Bit Encrypted</span>
             </span>
             <span>•</span>
-            <span>SEBI Regulatory Compliant</span>
+            <span>SEBI Compliant</span>
             <span>•</span>
             <span className="text-emerald-400 font-semibold">100% Free & Open</span>
           </div>

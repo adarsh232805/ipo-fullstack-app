@@ -78,8 +78,8 @@ export default function Navbar() {
               <span className="text-lg sm:text-xl font-extrabold text-white tracking-tight flex items-center gap-1">
                 IPOPulse <span className="text-emerald-400 font-bold">Pro</span>
               </span>
-              <span className="hidden sm:block text-[9px] uppercase tracking-wider font-semibold text-slate-500">
-                Primary Market Radar
+              <span className="hidden sm:block text-[9px] uppercase tracking-wider font-semibold text-slate-400">
+                Primary Market Radar • Made with <span className="text-rose-500">❤️</span> by <span className="text-emerald-400 font-bold">Adarsh Singh</span>
               </span>
             </div>
           </div>

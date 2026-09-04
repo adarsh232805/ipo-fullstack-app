@@ -248,9 +248,24 @@ export default function Home() {
 
           {/* Left Column: Headline & CTA */}
           <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-slate-700/80 backdrop-blur text-emerald-400 text-xs font-semibold shadow-sm">
-              <Sparkles size={14} className="text-yellow-400" />
-              India's Premier Real-Time Primary Market Intelligence
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-slate-700/80 backdrop-blur text-emerald-400 text-xs font-semibold shadow-sm">
+                <Sparkles size={14} className="text-yellow-400" />
+                India's Premier Real-Time Primary Market Intelligence
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 border border-emerald-500/30 backdrop-blur text-slate-300 text-xs font-medium shadow-sm">
+                <span>Made with</span>
+                <span className="text-rose-500 animate-pulse">❤️</span>
+                <span>by</span>
+                <a
+                  href="https://github.com/adarsh232805"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-white hover:text-emerald-400 transition"
+                >
+                  Adarsh Singh
+                </a>
+              </div>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.15]">
