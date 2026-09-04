@@ -1,4 +1,6 @@
+import mongoose from "mongoose";
 import Ipo from "../../models/Ipo.js";
+import { iposData } from "../../data/iposData.js";
 
 /* =========================================================
    GET ALL IPOs (SEARCH + FILTER + PAGINATION)
@@ -9,39 +11,58 @@ export const getAllIpos = async (req, res) => {
       search = "",
       status = "",
       page = 1,
-      limit = 8
+      limit = 10
     } = req.query;
-
-    const query = {};
-
-    /* 🔍 SEARCH BY COMPANY NAME */
-    if (search) {
-      query.companyName = {
-        $regex: search,
-        $options: "i"
-      };
-    }
-
-    /* 🎯 STATUS FILTER */
-    if (status) {
-      query.status = status;
-    }
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const [ipos, total] = await Promise.all([
-      Ipo.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit)),
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const query = {};
+        if (search) {
+          query.companyName = { $regex: search, $options: "i" };
+        }
+        if (status) {
+          query.status = status;
+        }
 
-      Ipo.countDocuments(query)
-    ]);
+        const [ipos, total] = await Promise.all([
+          Ipo.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(Number(limit)),
+          Ipo.countDocuments(query)
+        ]);
+
+        if (ipos && ipos.length > 0) {
+          return res.json({
+            ipos,
+            total,
+            totalPages: Math.ceil(total / Number(limit))
+          });
+        }
+      } catch (dbErr) {
+        console.warn("DB getAllIpos error, falling back to memory:", dbErr.message);
+      }
+    }
+
+    // In-memory fallback
+    let list = [...iposData];
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(i => (i.companyName || "").toLowerCase().includes(q));
+    }
+    if (status) {
+      list = list.filter(i => (i.status || "").toLowerCase() === status.toLowerCase());
+    }
+
+    const total = list.length;
+    const ipos = list.slice(skip, skip + Number(limit));
 
     res.json({
       ipos,
       total,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / Number(limit))
     });
   } catch (err) {
     console.error("Fetch IPOs error:", err);

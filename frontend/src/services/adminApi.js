@@ -90,3 +90,14 @@ export const updateFinancials = (ipoId, financials) =>
 
 export const updateIpoVideo = (ipoId, videoUrl) =>
   axios.put(`/admin/ipos/${ipoId}/video`, { videoUrl });
+
+/* ================================
+   ANALYTICS & SYSTEM SYNC
+================================ */
+
+export const getAdminAnalytics = () =>
+  axios.get("/admin/analytics");
+
+export const triggerMarketSync = () =>
+  axios.post("/market-sync/trigger");
+
