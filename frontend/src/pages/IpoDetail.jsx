@@ -891,38 +891,33 @@ export default function IpoDetail() {
               </div>
             </div>
 
-            {/* 6. Designated Registrar & Allotment Link */}
+            {/* 6. Designated Registrar & In-App Allotment Gateway */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">
-                  Designated Share Registrar
-                </span>
-                <h3 className="text-lg font-bold text-white mt-0.5">
-                  {ipo.registrar || "KFintech Limited"}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">
+                    Designated Share Registrar
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    Direct Gateway Active
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-white mt-1">
+                  {ipo.registrar || "Link Intime India Pvt Ltd"}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Responsible for allotment finalization, basis of allotment publishing, and refund management.
+                  SEBI registered RTA responsible for computerized lottery finalization, demat credit, and bank refund files.
                 </p>
               </div>
 
               <div className="flex items-center gap-2.5">
                 <Link
                   to="/allotment"
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
+                  className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2 cursor-pointer"
                 >
-                  Check Allotment Status
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  <span>Auto-Check All Added PANs (In-App)</span>
                 </Link>
-                {ipo.allotmentLink && (
-                  <a
-                    href={ipo.allotmentLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5"
-                  >
-                    <span>RTA Portal</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
               </div>
             </div>
 

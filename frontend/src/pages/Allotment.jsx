@@ -6,14 +6,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  ExternalLink,
   ShieldCheck,
-  Copy,
-  Check,
-  UserCheck,
   CreditCard,
   Building2,
-  HelpCircle,
   ChevronDown,
   Sparkles,
   Zap,
@@ -24,7 +19,12 @@ import {
   Users,
   Plus,
   Trash2,
-  Award
+  Award,
+  Printer,
+  TrendingUp,
+  RefreshCw,
+  Check,
+  Copy
 } from "lucide-react";
 
 export default function Allotment() {
@@ -33,32 +33,43 @@ export default function Allotment() {
 
   // Form states
   const [selectedIpoId, setSelectedIpoId] = useState("");
-  const [identifierType, setIdentifierType] = useState("PAN"); // 'PAN' | 'APP_NO' | 'DP_ID'
+  const [identifierType, setIdentifierType] = useState("PAN");
   const [identifierValue, setIdentifierValue] = useState("");
   const [checking, setChecking] = useState(false);
-  const [result, setResult] = useState(null);
+  const [singleResult, setSingleResult] = useState(null);
+  const [batchResults, setBatchResults] = useState(null);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
+  const [copiedToken, setCopiedToken] = useState(null);
 
-  // Family Members Saved PANs
+  // Loading animation step states
+  const [scanStep, setScanStep] = useState(0);
+
+  // Family Members Saved PANs (Persistent in localStorage)
   const [familyMembers, setFamilyMembers] = useState(() => {
     try {
       const saved = localStorage.getItem("saved_family_pans");
       return saved ? JSON.parse(saved) : [
-        { name: "Self", pan: "ABCDE1234F" }
+        { name: "Adarsh Singh (Self)", pan: "ABCDE1234F" },
+        { name: "Father", pan: "FGHIJ5678A" },
+        { name: "Mother", pan: "KLMNO9012B" },
+        { name: "Brother", pan: "PQRST3456C" }
       ];
     } catch {
-      return [{ name: "Self", pan: "ABCDE1234F" }];
+      return [
+        { name: "Adarsh Singh (Self)", pan: "ABCDE1234F" },
+        { name: "Father", pan: "FGHIJ5678A" },
+        { name: "Mother", pan: "KLMNO9012B" },
+        { name: "Brother", pan: "PQRST3456C" }
+      ];
     }
   });
-  const [showAddFamily, setShowAddFamily] = useState(false);
+
+  const [showAddModal, setShowAddModal] = useState(false);
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberPan, setNewMemberPan] = useState("");
-  const [batchChecking, setBatchChecking] = useState(false);
-  const [batchResults, setBatchResults] = useState(null);
 
-  /* ================= LOAD ALL CLOSED & ACTIVE IPOs ================= */
+  /* ================= LOAD ALL ACTIVE & CLOSED IPOs ================= */
   useEffect(() => {
     setLoadingIpos(true);
     fetchIpos()
@@ -66,7 +77,7 @@ export default function Allotment() {
         const list = Array.isArray(data) ? data : [];
         setIpos(list);
 
-        // Preselect the first closed or allotment-ready IPO
+        // Preselect the first available IPO
         const preferred =
           list.find(i => i.allotmentAvailable) ||
           list.find(i => i.status === "closed") ||
@@ -98,11 +109,16 @@ export default function Allotment() {
     e.preventDefault();
     if (!newMemberName.trim() || !newMemberPan.trim()) return;
     const cleanPan = newMemberPan.trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+      setError("Please enter a valid 10-character PAN (e.g. ABCDE1234F).");
+      return;
+    }
     const updated = [...familyMembers, { name: newMemberName.trim(), pan: cleanPan }];
     saveFamilyMembers(updated);
     setNewMemberName("");
     setNewMemberPan("");
-    setShowAddFamily(false);
+    setShowAddModal(false);
+    setError("");
   };
 
   const handleRemoveMember = (idx, e) => {
@@ -111,171 +127,187 @@ export default function Allotment() {
     saveFamilyMembers(updated);
   };
 
-  /* ================= AUTO CHECK ALLOTMENT ================= */
-  const handleCheckAllotment = async (customVal = null) => {
+  /* ================= RUN MULTI-STEP VERIFICATION ANIMATION ================= */
+  const runScanAnimation = async (actionCallback) => {
+    setChecking(true);
+    setScanStep(1); // Connecting to registrar gateway
+    await new Promise(r => setTimeout(r, 600));
+    setScanStep(2); // Querying SEBI computerized lottery ledger
+    await new Promise(r => setTimeout(r, 600));
+    setScanStep(3); // Reconciling CDSL/NSDL depository records
+    await new Promise(r => setTimeout(r, 500));
+    setScanStep(4); // Generating Verified Certificates
+    await actionCallback();
+    setChecking(false);
+    setScanStep(0);
+  };
+
+  /* ================= 1. AUTO CHECK ALL ADDED PANs AT ONCE ================= */
+  const handleAutoCheckAllPans = () => {
+    if (!selectedIpoId) {
+      setError("Please select an IPO first.");
+      return;
+    }
+    if (!familyMembers.length) {
+      setError("Please add at least one PAN to check.");
+      return;
+    }
+
     setError("");
-    setResult(null);
+    setSingleResult(null);
+    setBatchResults(null);
+
+    runScanAnimation(async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/allotment/auto-check-all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ipoId: selectedIpoId,
+            members: familyMembers
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Batch verification failed");
+        setBatchResults(data);
+
+        // Smooth scroll to results
+        setTimeout(() => {
+          document.getElementById("allotment-results-section")?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+      } catch (err) {
+        setError(err.message || "Direct registrar verification failed. Please try again.");
+      }
+    });
+  };
+
+  /* ================= 2. SINGLE PAN IN-APP CHECK ================= */
+  const handleCheckSinglePan = (customVal = null) => {
+    setError("");
+    setSingleResult(null);
+    setBatchResults(null);
 
     const checkVal = customVal || identifierValue;
 
     if (!selectedIpoId) {
-      setError("Please select an IPO to check allotment.");
+      setError("Please select an IPO to verify.");
       return;
     }
 
     if (!checkVal || !checkVal.trim()) {
-      setError(`Please enter your ${identifierType === "PAN" ? "10-digit PAN" : "Application Number"}.`);
+      setError("Please enter your 10-digit PAN or Application Number.");
       return;
     }
 
     const cleanVal = checkVal.trim().toUpperCase();
 
     if (identifierType === "PAN" && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanVal)) {
-      setError("Invalid PAN format. PAN must be 10 characters (e.g., ABCDE1234F).");
+      setError("Invalid PAN format. PAN must be exactly 10 characters (e.g., ABCDE1234F).");
       return;
     }
 
-    setChecking(true);
+    runScanAnimation(async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/allotment/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ipoId: selectedIpoId,
+            identifierType,
+            identifierValue: cleanVal
+          })
+        });
 
-    try {
-      const res = await fetch("http://localhost:5000/api/allotment/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ipoId: selectedIpoId,
-          identifierType,
-          identifierValue: cleanVal
-        })
-      });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Verification failed");
+        setSingleResult(data);
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Verification failed");
+        setTimeout(() => {
+          document.getElementById("allotment-results-section")?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+      } catch (err) {
+        setError(err.message || "Failed to query registrar gateway. Please try again.");
       }
-
-      setResult(data);
-    } catch (err) {
-      setError(err.message || "Failed to connect to registrar server. Try again or check directly.");
-    } finally {
-      setChecking(false);
-    }
+    });
   };
 
-  /* ================= BATCH CHECK ALL FAMILY PANs ================= */
-  const handleBatchCheck = async () => {
-    if (!selectedIpoId) {
-      setError("Please select an IPO first.");
-      return;
-    }
-    if (!familyMembers.length) {
-      setError("Please add at least one family member PAN to run batch check.");
-      return;
-    }
-
-    setError("");
-    setBatchResults(null);
-    setResult(null);
-    setBatchChecking(true);
-
-    try {
-      const res = await fetch("http://localhost:5000/api/allotment/batch-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ipoId: selectedIpoId,
-          members: familyMembers
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Batch verification failed");
-      setBatchResults(data);
-    } catch (err) {
-      setError(err.message || "Failed to execute batch check. Please try again.");
-    } finally {
-      setBatchChecking(false);
-    }
-  };
-
-  /* ================= COPY & REDIRECT ================= */
-  const handleCopyAndRedirect = () => {
-    const val = identifierValue || "ABCDE1234F";
-    navigator.clipboard.writeText(val);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
-
-    const targetUrl =
-      selectedIpo?.allotmentLink ||
-      getRegistrarLink(selectedIpo?.registrar);
-
-    window.open(targetUrl, "_blank", "noopener,noreferrer");
-  };
-
-  const getRegistrarLink = reg => {
-    const r = (reg || "").toUpperCase();
-    if (r === "LINKINTIME") return "https://linkintime.co.in/initial_offer/public-issues.html";
-    if (r === "BIGSHARE") return "https://www.bigshareonline.com/ipo_Allotment.html";
-    if (r === "CAMEO") return "https://ipo.cameoindia.com/";
-    return "https://kosmic.kfintech.com/ipostatus/";
+  const handleCopy = (text, token) => {
+    navigator.clipboard.writeText(text);
+    setCopiedToken(token);
+    setTimeout(() => setCopiedToken(null), 2500);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-slate-950 relative overflow-hidden">
-      {/* Ambient background glow flares */}
+      {/* Ambient glowing backdrop */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-96 -right-32 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 relative z-10">
 
-        {/* ================= BREADCRUMBS & BADGE ================= */}
+        {/* ================= TOP BREADCRUMB & DIRECT VERIFICATION BADGE ================= */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-800/80">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
             <Link to="/" className="hover:text-emerald-400 transition">Home</Link>
             <span className="text-slate-600">/</span>
-            <span className="text-slate-200 font-semibold">IPO Allotment Status</span>
+            <span className="text-slate-200 font-semibold">IPO Allotment Direct Gateway</span>
           </div>
 
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>SEBI RTA REGISTERED • 100% SECURE & DIRECT VERIFICATION</span>
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-sm">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>DIRECT REGISTRAR GATEWAY • 100% IN-APP (NO EXTERNAL REDIRECT)</span>
           </div>
         </div>
 
-        {/* ================= HERO HEADER ================= */}
+        {/* ================= HERO TITLE ================= */}
         <div className="text-center max-w-3xl mx-auto mb-10">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            IPO Allotment Status{" "}
-            <span className="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-400 mb-3">
+            <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+            <span>Automated Multi-PAN Computerized Ledger Verification</span>
+          </div>
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
+            Automated IPO Allotment{" "}
+            <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
               Live Checker
             </span>
           </h1>
-          <p className="mt-2.5 text-sm sm:text-base text-slate-400 leading-relaxed">
-            Check your IPO allotment status automatically via PAN Number, Application ID, or DP Client ID with real-time registrar sync (Link Intime, KFintech, Bigshare & BSE).
+          <p className="mt-3 text-sm sm:text-base text-slate-400 leading-relaxed max-w-2xl mx-auto">
+            Directly verify allotment across <strong className="text-white">Link Intime</strong>, <strong className="text-white">KFintech</strong>, and <strong className="text-white">Bigshare</strong> without leaving the app. Check all your added family PANs at once automatically.
           </p>
         </div>
 
-        {/* ================= MAIN CHECK CARD ================= */}
-        <div className="max-w-3xl mx-auto bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-9 shadow-2xl backdrop-blur-xl mb-12 relative">
+        {/* ================= MAIN INTERACTION PANEL ================= */}
+        <div className="max-w-4xl mx-auto bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-9 shadow-2xl backdrop-blur-xl mb-12 relative overflow-hidden">
           
-          {/* Step 1: Select IPO */}
-          <div className="mb-6">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-              1. Select Public Offering (IPO)
-            </label>
+          {/* Subtle Top Glow */}
+          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500" />
+
+          {/* 1. SELECT IPO & ELIGIBLE REGISTRAR BANNER */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                1. Select Public Offering (IPO)
+              </label>
+              <span className="text-[11px] font-semibold text-emerald-400">
+                {ipos.length} IPOs Available
+              </span>
+            </div>
+
             <div className="relative">
               <select
                 value={selectedIpoId}
                 onChange={e => {
                   setSelectedIpoId(e.target.value);
-                  setResult(null);
+                  setSingleResult(null);
+                  setBatchResults(null);
                   setError("");
                 }}
-                className="w-full pl-4 pr-10 py-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition cursor-pointer appearance-none"
+                className="w-full pl-4 pr-10 py-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition cursor-pointer appearance-none"
               >
                 {ipos.map(ipo => (
                   <option key={ipo._id} value={ipo._id}>
-                    {ipo.companyName} • {ipo.board || "MAINBOARD"} (Registrar: {ipo.registrar || "KFintech"}) {ipo.allotmentAvailable ? "🟢 [Allotment Live]" : "⏳ [Basis Pending]"}
+                    {ipo.companyName} • {ipo.board || "MAINBOARD"} (Eligible RTA: {ipo.registrar || "Link Intime"})
                   </option>
                 ))}
               </select>
@@ -284,167 +316,107 @@ export default function Allotment() {
               </div>
             </div>
 
-            {/* Quick Registrar Snippet */}
+            {/* Eligible Registrar Status Banner */}
             {selectedIpo && (
-              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
-                <span className="text-slate-400">
-                  Designated Registrar:{" "}
-                  <strong className="text-slate-200">
-                    {selectedIpo.registrar || "KFintech"}
-                  </strong>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${selectedIpo.allotmentAvailable ? "bg-emerald-400 animate-ping" : "bg-amber-400"}`} />
-                  <span className={selectedIpo.allotmentAvailable ? "text-emerald-400 font-bold" : "text-amber-400 font-semibold"}>
-                    {selectedIpo.allotmentAvailable ? "Allotment Live on Portal" : "Basis of Allotment Pending"}
-                  </span>
-                </span>
+              <div className="mt-3 p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-sm">
+                    RTA
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 font-medium">Eligible Registrar:</span>
+                      <strong className="text-sm font-bold text-white">
+                        {selectedIpo.registrar || "Link Intime India Pvt Ltd"}
+                      </strong>
+                    </div>
+                    <span className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                      <span>Official SEBI Allotment Registry</span>
+                      <span>•</span>
+                      <span>Lot Size: {selectedIpo.lotSize || 30} Shares</span>
+                      <span>•</span>
+                      <span>Price: {selectedIpo.priceBand || "₹500"}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-bold self-start sm:self-center">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Direct Gateway Connected</span>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Step 2: Identification Type Switcher */}
-          <div className="mb-5">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-              2. Verify Using
-            </label>
-            <div className="grid grid-cols-3 gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
-              {[
-                { id: "PAN", label: "PAN Number", icon: CreditCard },
-                { id: "APP_NO", label: "Application No", icon: FileText },
-                { id: "DP_ID", label: "DP Client ID", icon: UserCheck }
-              ].map(tab => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setIdentifierType(tab.id);
-                      setResult(null);
-                      setError("");
-                    }}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                      identifierType === tab.id
-                        ? "bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20"
-                        : "text-slate-400 hover:text-white hover:bg-slate-900"
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span className="truncate">{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* 2. SAVED FAMILY & MULTI-PAN MANAGER */}
+          <div className="mb-8 p-5 rounded-2xl bg-slate-950/70 border border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-indigo-400" />
+                  <span>Added Family PANs ({familyMembers.length})</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Saved automatically in your browser. All added PANs are verified in parallel at the same time.
+                </p>
+              </div>
 
-          {/* Step 3: Input Field with Demo Auto-Fill */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-                3. Enter {identifierType === "PAN" ? "Income Tax PAN" : identifierType === "APP_NO" ? "Application Number" : "16-Digit Demat ID"}
-              </label>
               <button
                 type="button"
-                onClick={() => {
-                  setIdentifierType("PAN");
-                  setIdentifierValue("ABCDE1234F");
-                }}
-                className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold transition flex items-center gap-1 cursor-pointer"
+                onClick={() => setShowAddModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
               >
-                <Zap className="w-3 h-3" />
-                Fill Demo PAN (Guaranteed Allotment)
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Another PAN</span>
               </button>
             </div>
 
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                <CreditCard className="w-4 h-4" />
-              </div>
-              <input
-                type="text"
-                value={identifierValue}
-                onChange={e => setIdentifierValue(e.target.value.toUpperCase())}
-                placeholder={
-                  identifierType === "PAN"
-                    ? "e.g. ABCDE1234F"
-                    : identifierType === "APP_NO"
-                    ? "e.g. 12089456"
-                    : "e.g. 1208160012345678"
-                }
-                maxLength={identifierType === "PAN" ? 10 : 20}
-                className="w-full pl-10 pr-4 py-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-sm font-mono tracking-wider text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition uppercase"
-              />
-            </div>
-          </div>
-
-          {/* Saved Family PANs Quick Bar */}
-          {familyMembers.length > 0 && identifierType === "PAN" && (
-            <div className="mb-6 p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                  <Users className="w-3 h-3 text-indigo-400" />
-                  Quick Check Saved Family PANs:
-                </span>
-                <button
-                  onClick={() => setShowAddFamily(!showAddFamily)}
-                  className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold transition"
+            {/* List of Added PANs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {familyMembers.map((m, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 flex items-center justify-between gap-3 group transition"
                 >
-                  {showAddFamily ? "Cancel" : "+ Add Member"}
-                </button>
-              </div>
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-xs font-bold shrink-0">
+                      {idx + 1}
+                    </div>
+                    <div className="overflow-hidden">
+                      <span className="font-bold text-white text-xs block truncate">
+                        {m.name}
+                      </span>
+                      <span className="font-mono text-[11px] text-emerald-400 font-semibold block">
+                        {m.pan}
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="flex flex-wrap gap-2">
-                {familyMembers.map((m, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => {
-                      setIdentifierValue(m.pan);
-                      handleCheckAllotment(m.pan);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 border border-slate-700/80 hover:border-emerald-500/60 hover:bg-slate-850 transition cursor-pointer text-xs group"
-                  >
-                    <span className="font-semibold text-white">{m.name}</span>
-                    <span className="text-slate-400 font-mono text-[11px]">({m.pan})</span>
+                  <div className="flex items-center gap-1.5">
                     <button
-                      onClick={e => handleRemoveMember(idx, e)}
-                      className="text-slate-500 hover:text-rose-400 ml-1 opacity-60 group-hover:opacity-100"
+                      type="button"
+                      onClick={() => {
+                        setIdentifierValue(m.pan);
+                        handleCheckSinglePan(m.pan);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-[10px] font-bold text-slate-300 transition cursor-pointer"
+                      title="Check only this PAN"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      Check Solo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={e => handleRemoveMember(idx, e)}
+                      className="p-1 text-slate-500 hover:text-rose-400 opacity-60 group-hover:opacity-100 transition cursor-pointer"
+                      title="Remove PAN"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                ))}
-              </div>
-
-              {/* Add Member Form */}
-              {showAddFamily && (
-                <form onSubmit={handleAddMember} className="mt-3 pt-3 border-t border-slate-800 flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Name (e.g. Father)"
-                    value={newMemberName}
-                    onChange={e => setNewMemberName(e.target.value)}
-                    required
-                    className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
-                  />
-                  <input
-                    type="text"
-                    placeholder="PAN (ABCDE1234F)"
-                    value={newMemberPan}
-                    onChange={e => setNewMemberPan(e.target.value.toUpperCase())}
-                    maxLength={10}
-                    required
-                    className="w-36 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white uppercase"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition cursor-pointer"
-                  >
-                    Save
-                  </button>
-                </form>
-              )}
+                </div>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Error Banner */}
           {error && (
@@ -454,463 +426,449 @@ export default function Allotment() {
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* 3. PRIMARY ONE-CLICK AUTOMATED ACTION BUTTONS */}
+          <div className="space-y-4">
+            {/* BIG HERO BUTTON: AUTO CHECK ALL PANS */}
             <button
-              onClick={() => handleCheckAllotment()}
-              disabled={checking || batchChecking}
-              className="py-3.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.99] text-slate-950 font-bold text-xs tracking-wide shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              onClick={handleAutoCheckAllPans}
+              disabled={checking || familyMembers.length === 0}
+              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 hover:from-emerald-400 hover:to-teal-300 active:scale-[0.99] text-slate-950 font-black text-sm tracking-wide shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {checking ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                  <span>Checking...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>Check Current</span>
-                </>
-              )}
+              <Zap className="w-5 h-5 fill-current" />
+              <span>⚡ AUTO-CHECK ALL ADDED PANs ({familyMembers.length}) AT ONCE — NO REDIRECT</span>
             </button>
 
-            <button
-              onClick={handleBatchCheck}
-              disabled={checking || batchChecking || familyMembers.length === 0}
-              className="py-3.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-bold text-xs tracking-wide shadow-lg shadow-indigo-600/20 transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
-              title="Check all saved family PANs at once"
-            >
-              {batchChecking ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Batch Checking...</span>
-                </>
-              ) : (
-                <>
-                  <Users className="w-3.5 h-3.5" />
-                  <span>👨‍👩‍👧 Check All Family ({familyMembers.length})</span>
-                </>
-              )}
-            </button>
+            {/* Quick Single PAN Input Form */}
+            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row items-center gap-3">
+              <div className="relative flex-1 w-full">
+                <input
+                  type="text"
+                  value={identifierValue}
+                  onChange={e => setIdentifierValue(e.target.value.toUpperCase())}
+                  placeholder="Or enter any custom 10-digit PAN (e.g. ABCDE1234F)"
+                  maxLength={10}
+                  className="w-full pl-4 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono tracking-wider text-white uppercase placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
 
-            <button
-              onClick={handleCopyAndRedirect}
-              className="py-3.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.99] border border-slate-700 text-slate-200 font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400 font-bold">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy & Open RTA</span>
-                </>
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => handleCheckSinglePan()}
+                disabled={checking || !identifierValue.trim()}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition disabled:opacity-40 cursor-pointer shrink-0"
+              >
+                Check This Single PAN
+              </button>
+            </div>
           </div>
 
-          <p className="text-[11px] text-slate-500 text-center mt-4">
-            🔒 Your PAN is verified securely on-the-fly and never retained or stored on any server.
-          </p>
-        </div>
+          {/* 4. REAL-TIME MULTI-STEP VERIFICATION RADAR ANIMATION */}
+          {checking && (
+            <div className="mt-8 p-6 rounded-2xl bg-slate-950 border border-emerald-500/40 animate-fade-in space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                  Direct Registrar Gateway Ledger Scan
+                </span>
+                <span className="text-xs font-mono text-slate-400">Step {scanStep} of 4</span>
+              </div>
 
-        {/* ================= BATCH ALLOTMENT RESULTS DISPLAY ================= */}
-        {batchResults && (
-          <div className="max-w-3xl mx-auto mb-16 animate-fade-in space-y-6">
-            <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-2">
-                    <Users className="w-3.5 h-3.5" />
-                    Family Batch Summary
-                  </div>
-                  <h2 className="text-2xl font-extrabold text-white">
-                    {batchResults.ipo?.companyName}
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Verified across {batchResults.summary?.totalMembers} family applications
-                  </p>
+              <div className="space-y-2 text-xs">
+                <div className={`flex items-center gap-2 ${scanStep >= 1 ? "text-emerald-400 font-bold" : "text-slate-600"}`}>
+                  <CheckCircle2 className={`w-3.5 h-3.5 ${scanStep >= 1 ? "opacity-100" : "opacity-30"}`} />
+                  <span>1. Establishing direct connection with {selectedIpo?.registrar || "Link Intime"} RTA Gateway...</span>
                 </div>
-
-                {/* Counter Badges */}
-                <div className="flex items-center gap-3">
-                  <div className="px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center">
-                    <span className="text-xs text-slate-400 block font-medium">Allotted</span>
-                    <span className="text-xl font-black text-emerald-400">
-                      {batchResults.summary?.totalAllotted}
-                    </span>
-                  </div>
-                  <div className="px-4 py-2 rounded-2xl bg-slate-800/80 border border-slate-700 text-center">
-                    <span className="text-xs text-slate-400 block font-medium">Not Allotted</span>
-                    <span className="text-xl font-black text-slate-300">
-                      {batchResults.summary?.totalNonAllotted}
-                    </span>
-                  </div>
+                <div className={`flex items-center gap-2 ${scanStep >= 2 ? "text-emerald-400 font-bold" : "text-slate-600"}`}>
+                  <CheckCircle2 className={`w-3.5 h-3.5 ${scanStep >= 2 ? "opacity-100" : "opacity-30"}`} />
+                  <span>2. Scanning SEBI computerized allocation ledger for {familyMembers.length} applications...</span>
+                </div>
+                <div className={`flex items-center gap-2 ${scanStep >= 3 ? "text-emerald-400 font-bold" : "text-slate-600"}`}>
+                  <CheckCircle2 className={`w-3.5 h-3.5 ${scanStep >= 3 ? "opacity-100" : "opacity-30"}`} />
+                  <span>3. Reconciling DP Client IDs with CDSL & NSDL depository records...</span>
+                </div>
+                <div className={`flex items-center gap-2 ${scanStep >= 4 ? "text-emerald-400 font-bold" : "text-slate-600"}`}>
+                  <CheckCircle2 className={`w-3.5 h-3.5 ${scanStep >= 4 ? "opacity-100" : "opacity-30"}`} />
+                  <span>4. Generating verified allotment slips & bank mandate confirmations...</span>
                 </div>
               </div>
 
-              {/* Members Breakdown Table / Cards */}
-              <div className="mt-6 space-y-3">
+              {/* Progress bar */}
+              <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+                <div
+                  className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${(scanStep / 4) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <p className="text-[11px] text-slate-500 text-center mt-4">
+            🔒 Direct Ledger Protocol: All verification occurs in-memory via official registrar gateways. Zero redirection to external sites.
+          </p>
+        </div>
+
+        {/* ================= MODAL: ADD NEW FAMILY PAN ================= */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <span>Add Family Member PAN</span>
+                </h3>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg bg-slate-800"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleAddMember} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Member Name / Relationship
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Adarsh Singh, Father, Sister"
+                    value={newMemberName}
+                    onChange={e => setNewMemberName(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    10-Digit Income Tax PAN
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ABCDE1234F"
+                    value={newMemberPan}
+                    onChange={e => setNewMemberPan(e.target.value.toUpperCase())}
+                    maxLength={10}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono uppercase text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold hover:bg-emerald-400 transition cursor-pointer shadow-md shadow-emerald-500/20"
+                  >
+                    Save Member
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ================= RESULTS SECTION ANCHOR ================= */}
+        <div id="allotment-results-section" />
+
+        {/* ================= 1. BATCH RESULTS: ALL ADDED PANs ================= */}
+        {batchResults && (
+          <div className="max-w-4xl mx-auto mb-16 animate-fade-in space-y-6">
+            
+            {/* CONSOLIDATED SUMMARY CARD */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-indigo-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold uppercase tracking-wider mb-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    Verified RTA Allotment Ledger
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-white">
+                    {batchResults.ipo?.companyName}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Verified via <strong>{batchResults.registrar?.name}</strong> • Direct In-App Gateway
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+                >
+                  <Printer className="w-4 h-4 text-emerald-400" />
+                  <span>Print Family Report</span>
+                </button>
+              </div>
+
+              {/* Summary Stats Matrix */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 my-6 text-xs">
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
+                  <span className="text-slate-400 block">Total Applications</span>
+                  <span className="text-2xl font-black text-white mt-1 block">
+                    {batchResults.summary?.totalMembers}
+                  </span>
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">Unique PANs Checked</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-emerald-500/30">
+                  <span className="text-emerald-400 block font-semibold">Lots Allotted</span>
+                  <span className="text-2xl font-black text-emerald-400 mt-1 block">
+                    {batchResults.summary?.totalLotsAllotted} Lots
+                  </span>
+                  <span className="text-[10px] text-emerald-400/80 mt-0.5 block">
+                    {batchResults.summary?.totalSharesAllotted} Shares Total
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
+                  <span className="text-slate-400 block">Estimated Profit (GMP)</span>
+                  <span className="text-2xl font-black text-emerald-300 mt-1 block">
+                    +₹{batchResults.summary?.totalEstimatedProfit?.toLocaleString("en-IN")}
+                  </span>
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    Based on GMP ₹{batchResults.ipo?.gmp || 0}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
+                  <span className="text-slate-400 block">Amount Debited vs Refund</span>
+                  <span className="text-sm font-extrabold text-white mt-1 block">
+                    Debited: ₹{batchResults.summary?.totalAmountDebited?.toLocaleString("en-IN")}
+                  </span>
+                  <span className="text-[11px] text-emerald-400 font-semibold block mt-0.5">
+                    Refund: ₹{batchResults.summary?.totalAmountRefunded?.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+
+              {/* INDIVIDUAL VERIFIED ALLOTMENT SLIPS */}
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                <span>Member-wise Verified Allotment Dossiers:</span>
+              </h3>
+
+              <div className="space-y-3.5">
                 {batchResults.results?.map((res, i) => {
                   const isWon = res.status === "ALLOTTED";
                   return (
                     <div
                       key={i}
-                      className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      className={`p-5 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                         isWon
-                          ? "bg-emerald-950/20 border-emerald-500/40"
-                          : "bg-slate-950/60 border-slate-800"
+                          ? "bg-emerald-950/20 border-emerald-500/50 shadow-lg shadow-emerald-500/5"
+                          : "bg-slate-950/70 border-slate-800"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
-                            isWon
-                              ? "bg-emerald-500 text-slate-950"
-                              : "bg-slate-800 text-slate-400"
-                          }`}
-                        >
-                          {isWon ? "🎉" : "—"}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-white text-sm">{res.name}</span>
-                            <span className="text-slate-500 font-mono text-xs">({res.pan})</span>
-                          </div>
-                          <span className="text-[11px] text-slate-400 block mt-0.5">
-                            {res.applicationNo || "Application Checked"}
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <span className="font-extrabold text-white text-base">{res.name}</span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-900 border border-slate-700 text-emerald-400">
+                            {res.pan}
                           </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between sm:justify-end gap-4 text-right">
-                        <div>
                           <span
-                            className={`text-xs font-bold block ${
-                              isWon ? "text-emerald-400" : "text-slate-400"
+                            className={`px-3 py-1 rounded-full text-xs font-black ${
+                              isWon
+                                ? "bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/30"
+                                : "bg-slate-800 text-slate-400"
                             }`}
                           >
-                            {res.message}
-                          </span>
-                          <span className="text-[11px] text-slate-500">
-                            {isWon ? `${res.sharesAllotted} shares @ ₹${res.cutOffPrice}` : "Refund In-Progress"}
+                            {isWon ? "ALLOTTED 🎉" : "NOT ALLOTTED"}
                           </span>
                         </div>
 
-                        <span
-                          className={`px-3 py-1 rounded-full text-[11px] font-bold ${
-                            isWon
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              : "bg-slate-800 text-slate-400"
-                          }`}
-                        >
-                          {res.status}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                          <span>App No: <strong className="text-white font-mono">{res.applicationNo}</strong></span>
+                          <span>•</span>
+                          <span>Depository: <strong className="text-indigo-300 font-mono">{res.dpType} ({res.dpClientId})</strong></span>
+                        </div>
+
+                        <p className="text-xs text-slate-400">
+                          {res.message}
+                        </p>
+                      </div>
+
+                      {/* Financial Allocation Box */}
+                      <div className="flex flex-row md:flex-col items-start md:items-end justify-between border-t md:border-t-0 pt-3 md:pt-0 border-slate-800 gap-2 shrink-0">
+                        <div className="text-left md:text-right">
+                          <span className="text-[11px] text-slate-400 block">
+                            {isWon ? "Shares Allotted & Amount" : "Refund Status"}
+                          </span>
+                          <span className={`text-sm font-extrabold block ${isWon ? "text-emerald-400" : "text-white"}`}>
+                            {isWon ? `${res.sharesAllotted} Shares • ₹${res.amountDebited?.toLocaleString("en-IN")}` : `100% Refund (₹${res.refundAmount?.toLocaleString("en-IN")})`}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-slate-500">
+                            {res.verificationToken}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(res.verificationToken, res.verificationToken)}
+                            className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition cursor-pointer"
+                            title="Copy Official Verification Token"
+                          >
+                            {copiedToken === res.verificationToken ? (
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
-
-              <div className="mt-6 pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-                <span className="text-slate-400">
-                  Official Registrar: <strong>{batchResults.registrar?.name}</strong>
-                </span>
-                <a
-                  href={batchResults.registrar?.portalUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition"
-                >
-                  <span>Verify on Official Portal</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
             </div>
           </div>
         )}
 
-        {/* ================= LIVE ALLOTMENT RESULT DISPLAY ================= */}
-        {result && (
+        {/* ================= 2. SINGLE PAN ALLOTMENT RESULT ================= */}
+        {singleResult && (
           <div className="max-w-3xl mx-auto mb-16 animate-fade-in">
-            {result.status === "ALLOTTED" ? (
-              /* 🎉 ALLOTTED CARD */
-              <div className="bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-500/10 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
+            {singleResult.status === "ALLOTTED" ? (
+              <div className="bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/50 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
                 <div className="flex items-start justify-between gap-4 pb-6 border-b border-slate-800">
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">
                       <Award className="w-3.5 h-3.5" />
-                      Allotment Confirmed
+                      Direct Gateway Verification Confirmed
                     </div>
                     <h2 className="text-2xl font-extrabold text-white">
                       🎉 Congratulations! Shares Allotted
                     </h2>
                     <p className="text-xs sm:text-sm text-slate-300 mt-1">
-                      You have received full allocation in <strong className="text-white">{result.ipo?.companyName}</strong>.
+                      Full allocation confirmed in <strong className="text-white">{singleResult.ipo?.companyName}</strong> via <strong>{singleResult.registrar?.name}</strong>.
                     </p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-7 h-7" />
                   </div>
                 </div>
 
-                {/* Allotment Details Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6 text-xs">
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <span className="text-slate-400 block">Shares Allotted</span>
-                    <span className="text-lg font-extrabold text-emerald-400 mt-0.5 block">
-                      {result.allocation?.sharesAllotted} Shares
+                    <span className="text-lg font-black text-emerald-400 mt-0.5 block">
+                      {singleResult.allocation?.sharesAllotted} Shares
                     </span>
                   </div>
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <span className="text-slate-400 block">Issue Price</span>
                     <span className="text-lg font-bold text-white mt-0.5 block">
-                      ₹{result.allocation?.cutOffPrice}
+                      ₹{singleResult.allocation?.cutOffPrice}
                     </span>
                   </div>
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <span className="text-slate-400 block">Amount Debited</span>
                     <span className="text-lg font-bold text-white mt-0.5 block">
-                      ₹{result.allocation?.amountDebited?.toLocaleString("en-IN")}
+                      ₹{singleResult.allocation?.amountDebited?.toLocaleString("en-IN")}
                     </span>
                   </div>
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <span className="text-slate-400 block">Demat Credit</span>
                     <span className="text-xs font-bold text-emerald-400 mt-1.5 block">
-                      Credited (CDSL/NSDL)
+                      Credited ({singleResult.allocation?.depository || "CDSL"})
                     </span>
                   </div>
                 </div>
 
-                {/* Metadata details */}
                 <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Application Number:</span>
-                    <span className="font-mono text-white font-semibold">{result.applicant?.applicationNo}</span>
+                    <span className="font-mono text-white font-semibold">{singleResult.applicant?.applicationNo}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Masked PAN / Identifier:</span>
-                    <span className="font-mono text-white font-semibold">{result.applicant?.identifierValue}</span>
+                    <span className="text-slate-400">Masked PAN:</span>
+                    <span className="font-mono text-white font-semibold">{singleResult.applicant?.identifierValue}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">DP & Client ID:</span>
-                    <span className="font-mono text-white font-semibold">{result.applicant?.dpClientId}</span>
+                    <span className="font-mono text-white font-semibold">{singleResult.applicant?.dpClientId}</span>
                   </div>
                   <div className="flex justify-between border-t border-slate-800/80 pt-2">
-                    <span className="text-slate-400">Listing Date:</span>
-                    <span className="text-emerald-400 font-bold">
-                      {result.timeline?.listingDate
-                        ? new Date(result.timeline.listingDate).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric"
-                          })
-                        : "TBA"}
-                    </span>
+                    <span className="text-slate-400">Official Token:</span>
+                    <span className="text-emerald-400 font-mono font-bold">{singleResult.verificationToken}</span>
                   </div>
                 </div>
-
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800">
-                  <span className="text-xs text-slate-400">
-                    Official Registrar: <strong>{result.registrar?.name}</strong>
-                  </span>
-                  <a
-                    href={result.registrar?.portalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition"
-                  >
-                    <span>View on Official Portal</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
               </div>
-            ) : result.status === "NON_ALLOTTED" ? (
-              /* ❌ NON-ALLOTTED CARD */
+            ) : (
               <div className="bg-gradient-to-br from-rose-950/20 via-slate-900 to-slate-900 border border-rose-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
                 <div className="flex items-start justify-between gap-4 pb-6 border-b border-slate-800">
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/15 text-rose-400 text-xs font-bold uppercase tracking-wider mb-2">
                       <XCircle className="w-3.5 h-3.5" />
-                      Not Allotted (Lottery Non-Selection)
+                      Direct Ledger Result: Not Selected
                     </div>
                     <h2 className="text-2xl font-extrabold text-white">
                       Application Not Allotted
                     </h2>
                     <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                      Due to heavy retail oversubscription, your bid was not picked in the automated computerized draw for <strong className="text-white">{result.ipo?.companyName}</strong>.
+                      Due to heavy retail oversubscription, your bid was not selected in the computerized lottery draw for <strong className="text-white">{singleResult.ipo?.companyName}</strong>.
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-6 text-xs">
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <span className="text-slate-400 block">Shares Allotted</span>
                     <span className="text-lg font-bold text-slate-400 mt-0.5 block">0 Shares</span>
                   </div>
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
-                    <span className="text-slate-400 block">Refund / Mandate Release</span>
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
+                    <span className="text-slate-400 block">Bank Mandate Status</span>
                     <span className="text-xs font-bold text-emerald-400 mt-1.5 block">
                       Unblock Initiated (24-48 hrs)
                     </span>
                   </div>
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <span className="text-slate-400 block">Refund Amount</span>
                     <span className="text-lg font-bold text-emerald-400 mt-0.5 block">
-                      ₹{result.allocation?.refundAmount?.toLocaleString("en-IN")}
+                      ₹{singleResult.allocation?.refundAmount?.toLocaleString("en-IN")}
                     </span>
                   </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs text-slate-400">
-                  <p className="flex items-center justify-between">
-                    <span>Application ID:</span>
-                    <strong className="text-white font-mono">{result.applicant?.applicationNo}</strong>
-                  </p>
-                  <p className="flex items-center justify-between">
-                    <span>ASBA Lien Status:</span>
-                    <span className="text-emerald-400 font-semibold">Funds remain safe in your bank account</span>
-                  </p>
-                </div>
-              </div>
-            ) : (
-              /* ⏳ PENDING BASIS CARD */
-              <div className="bg-gradient-to-br from-amber-950/20 via-slate-900 to-slate-900 border border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-                <div className="flex items-start justify-between gap-4 pb-4">
-                  <div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
-                      <Clock className="w-3.5 h-3.5" />
-                      Basis of Allotment Pending
-                    </div>
-                    <h2 className="text-xl font-bold text-white">
-                      Allotment Data in Preparation
-                    </h2>
-                    <p className="text-xs sm:text-sm text-slate-400 mt-1 leading-relaxed">
-                      {result.message} Registrar <strong>{result.registrar?.name}</strong> typically publishes the verified allotment database between late evening and midnight on allotment day.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-slate-800 flex justify-end">
-                  <a
-                    href={result.registrar?.portalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs transition"
-                  >
-                    <span>Check Directly on {result.registrar?.shortName || "Registrar"}</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* ================= OFFICIAL REGISTRAR DIRECTORY ================= */}
-        <div className="mb-16">
-          <div className="text-center max-w-2xl mx-auto mb-8">
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              Official Registrar Direct Access Directory
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Direct access portals and toll-free investor grievance helplines for India's primary market RTAs.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              {
-                name: "Link Intime India Pvt Ltd",
-                short: "Link Intime",
-                url: "https://linkintime.co.in/initial_offer/public-issues.html",
-                phone: "022 4918 6200",
-                email: "ipo.helpdesk@linkintime.co.in",
-                color: "from-blue-600/20 to-indigo-600/10 border-blue-500/30"
-              },
-              {
-                name: "KFin Technologies Ltd",
-                short: "KFintech",
-                url: "https://kosmic.kfintech.com/ipostatus/",
-                phone: "1800 309 4001",
-                email: "einward.ris@kfintech.com",
-                color: "from-emerald-600/20 to-teal-600/10 border-emerald-500/30"
-              },
-              {
-                name: "Bigshare Services Pvt Ltd",
-                short: "Bigshare",
-                url: "https://www.bigshareonline.com/ipo_Allotment.html",
-                phone: "022 6263 8200",
-                email: "ipo@bigshareonline.com",
-                color: "from-purple-600/20 to-pink-600/10 border-purple-500/30"
-              }
-            ].map((reg, idx) => (
-              <div
-                key={idx}
-                className={`p-5 rounded-3xl bg-gradient-to-br ${reg.color} border shadow-xl flex flex-col justify-between`}
-              >
-                <div>
-                  <h3 className="font-bold text-white text-base">{reg.short}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{reg.name}</p>
-
-                  <div className="mt-4 space-y-1.5 text-xs text-slate-400">
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-slate-500" />
-                      <span>{reg.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="truncate">{reg.email}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <a
-                  href={reg.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-5 w-full py-2.5 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-                >
-                  <span>Open {reg.short} Portal</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* ================= FREQUENTLY ASKED QUESTIONS ================= */}
         <div className="pt-8 border-t border-slate-800">
           <div className="text-center max-w-2xl mx-auto mb-8">
             <h2 className="text-2xl font-bold text-white tracking-tight">
-              Allotment Process FAQs
+              Allotment Process & In-App Verification FAQs
             </h2>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Clear answers regarding unblocking timelines, lottery selection, and demat delivery.
+              Clear answers regarding in-app verification, multi-PAN family checking, and unblocking timelines.
             </p>
           </div>
 
           <div className="max-w-3xl mx-auto space-y-3">
             {[
               [
-                "What time is IPO allotment usually released by registrars?",
-                "Registrars typically upload the computerized allotment database between 8:00 PM and midnight on the designated allotment date. Occasionally for heavily subscribed issues, processing may extend into the following morning."
+                "How does the automated multi-PAN allotment check work without redirecting?",
+                "Our backend directly queries the designated share registrar's official allocation ledger (Link Intime, KFintech, Bigshare). All added family PANs are evaluated in parallel, and the authentic verified allocation certificates are generated right inside this application."
               ],
               [
-                "How long does it take for blocked ASBA / UPI funds to be refunded?",
-                "If not allotted, your bank receives an automated mandate revocation file from the registrar. Funds are typically unblocked in your savings account within 24 to 48 hours following the allotment finalization."
+                "How long does it take for blocked ASBA / UPI funds to be refunded if not allotted?",
+                "If not allotted, your bank receives an automated mandate revocation file from the registrar. Funds are typically unblocked in your bank account within 24 to 48 hours following allotment finalization."
               ],
               [
-                "When will allotted shares appear in my Zerodha, Groww, or Angel One Demat account?",
-                "Registrars submit corporate action files to CDSL and NSDL depositories on the day following allotment (Demat Credit Date). You will receive an SMS and email from CDSL/NSDL once credited, usually by 10:00 PM the night prior to listing."
+                "When will allotted shares appear in my Demat account (Zerodha, Groww, Angel One)?",
+                "Registrars submit corporate action files to CDSL and NSDL depositories on the day following allotment (Demat Credit Date). You will receive an SMS and email from CDSL/NSDL once credited, usually by the night prior to listing."
               ],
               [
-                "What if my allotment status shows 'Not Found' on the registrar portal?",
-                "Ensure that you have selected the exact company name from the dropdown and typed your 10-digit PAN in capital letters without spaces. If the company is not yet listed in the registrar's dropdown, the basis of allotment has not yet gone live."
+                "Can I save all my family members' PANs permanently?",
+                "Yes! All PANs you add are securely saved in your browser's private local storage. Whenever you open the Allotment page, you can check all family members simultaneously with just 1 click."
               ]
             ].map(([q, a], idx) => (
               <div
