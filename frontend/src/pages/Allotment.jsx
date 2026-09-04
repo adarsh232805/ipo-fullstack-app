@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { fetchIpos } from "../services/api";
+import { API_BASE_URL } from "../utils/apiConfig";
 import {
   Search,
   CheckCircle2,
@@ -159,8 +160,7 @@ export default function Allotment() {
 
     runScanAnimation(async () => {
       try {
-        const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
-        const res = await fetch(`${apiBase}/api/allotment/auto-check-all`, {
+        const res = await fetch(`${API_BASE_URL}/api/allotment/auto-check-all`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -210,8 +210,7 @@ export default function Allotment() {
 
     runScanAnimation(async () => {
       try {
-        const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
-        const res = await fetch(`${apiBase}/api/allotment/check`, {
+        const res = await fetch(`${API_BASE_URL}/api/allotment/check`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

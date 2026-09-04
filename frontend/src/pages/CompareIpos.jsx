@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { fetchIpos } from "../services/api";
 import ApplyIpoModal from "../components/ApplyIpoModal";
+import { API_BASE_URL } from "../utils/apiConfig";
 import {
   Scale,
   Sparkles,
@@ -121,8 +122,7 @@ export default function CompareIpos() {
     setAiSummary("");
 
     try {
-      const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
-      const res = await fetch(`${apiBase}/api/ai/groq`, {
+      const res = await fetch(`${API_BASE_URL}/api/ai/groq`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -174,8 +174,7 @@ export default function CompareIpos() {
     setChatReply("");
 
     try {
-      const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
-      const res = await fetch(`${apiBase}/api/ai/groq`, {
+      const res = await fetch(`${API_BASE_URL}/api/ai/groq`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

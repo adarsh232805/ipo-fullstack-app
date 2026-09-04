@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { fetchIpoById } from "../services/api";
 import { updateIpo } from "../services/adminApi";
 import AdminGmpEditor from "../components/AdminGmpEditor";
+import { API_BASE_URL } from "../utils/apiConfig";
 
 export default function AdminEditIpo() {
   const { id } = useParams();
@@ -143,9 +144,8 @@ export default function AdminEditIpo() {
       <Section title="Daily GMP Update">
         <button
           onClick={async () => {
-            const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
             await fetch(
-              `${apiBase}/api/admin/ipos/${id}/gmp`,
+              `${API_BASE_URL}/api/admin/ipos/${id}/gmp`,
               {
                 method: "POST",
                 headers: {

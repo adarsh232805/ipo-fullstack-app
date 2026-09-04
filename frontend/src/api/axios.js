@@ -1,9 +1,8 @@
 import axios from "axios";
-
-const baseURL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "") + "/api";
+import { API_URL } from "../utils/apiConfig";
 
 const api = axios.create({
-  baseURL,
+  baseURL: API_URL,
 });
 
 // Attach user token automatically
